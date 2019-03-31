@@ -14,6 +14,7 @@ using Windows.UI.Xaml.Navigation;
 using Template10.Services.SerializationService;
 using Template10.Services.ViewService;
 using Template10.Utils;
+using System.Diagnostics;
 
 namespace Template10.Services.NavigationService
 {
@@ -25,8 +26,6 @@ namespace Template10.Services.NavigationService
         public FrameFacade FrameFacade => FrameFacadeInternal;
         public bool IsInMainView { get; }
         public Frame Frame => FrameFacade.Frame;
-        object LastNavigationParameter { get; set; }
-        string LastNavigationType { get; set; }
         public object Content => Frame.Content;
 
         public DispatcherWrapper Dispatcher => this.GetDispatcherWrapper() as DispatcherWrapper;
@@ -38,21 +37,25 @@ namespace Template10.Services.NavigationService
             set { Frame.SetNavigationState(value); }
         }
 
+        public int SessionId { get; private set; }
+
         #region Debug
 
+        [Conditional("DEBUG")]
         static void DebugWrite(string text = null, Services.LoggingService.Severities severity = Services.LoggingService.Severities.Template10, [CallerMemberName]string caller = null) =>
             Services.LoggingService.LoggingService.WriteLine(text, severity, caller: $"NavigationService.{caller}");
 
         #endregion
 
         public static INavigationService GetForFrame(Frame frame) =>
-            WindowWrapper.ActiveWrappers.SelectMany(x => x.NavigationServices).FirstOrDefault(x => x.FrameFacade.Frame.Equals(frame));
+            WindowContext.ActiveWrappers.SelectMany(x => x.NavigationServices).FirstOrDefault(x => x.FrameFacade.Frame.Equals(frame));
 
-        protected internal NavigationService(Frame frame)
+        public NavigationService(Frame frame, int session, string id)
         {
             SerializationService = Services.SerializationService.SerializationService.Json;
             IsInMainView = CoreApplication.MainView == CoreApplication.GetCurrentView();
-            FrameFacadeInternal = new FrameFacade(this, frame);
+            SessionId = session;
+            FrameFacadeInternal = new FrameFacade(this, frame, id);
             FrameFacadeInternal.Navigating += async (s, e) =>
             {
                 if (e.Suspending)
@@ -61,9 +64,6 @@ namespace Template10.Services.NavigationService
                 var page = FrameFacadeInternal.Content as Page;
                 if (page != null)
                 {
-                    // force (x:bind) page bindings to update
-                    XamlUtils.UpdateBindings(page);
-
                     // call navagable override (navigating)
                     var dataContext = ResolveForPage(page);
                     if (dataContext != null)
@@ -81,10 +81,8 @@ namespace Template10.Services.NavigationService
             {
                 var parameter = SerializationService.Deserialize(e.Parameter?.ToString());
                 var currentContent = FrameFacadeInternal.Frame.Content;
-                if (Equals(e.Parameter?.ToString(), SerializationService.Serialize(LastNavigationParameter)))
-                    parameter = LastNavigationParameter;
-                await this.GetDispatcherWrapper().DispatchAsync(async () =>
-                {
+                //await this.GetDispatcherWrapper().DispatchAsync(async () =>
+                //{
                     try
                     {
                         if (currentContent == FrameFacadeInternal.Frame.Content)
@@ -95,7 +93,7 @@ namespace Template10.Services.NavigationService
                         DebugWrite($"DispatchAsync/NavigateToAsync {ex.Message}");
                         throw;
                     }
-                }, 1).ConfigureAwait(false);
+                //}, 1).ConfigureAwait(false);
             };
         }
 
@@ -105,7 +103,7 @@ namespace Template10.Services.NavigationService
             {
                 // to support dependency injection, but keeping it optional.
                 var viewModel = BootStrapper.Current.ResolveForPage(page, this);
-                if ((viewModel != null))
+                if (viewModel != null)
                 {
                     page.DataContext = viewModel;
                     return viewModel;
@@ -157,17 +155,19 @@ namespace Template10.Services.NavigationService
 
             frameContent = frameContent ?? FrameFacadeInternal.Frame.Content;
 
-            LastNavigationParameter = parameter;
-            LastNavigationType = frameContent.GetType().FullName;
-
             var page = frameContent as Page;
             if (page != null)
             {
-                if (mode == NavigationMode.New)
+                if (page is IDisposable cleanup)
                 {
-                    var pageState = FrameFacadeInternal.PageStateSettingsService(page.GetType()).Values;
-                    pageState?.Clear();
+                    cleanup.Dispose();
                 }
+
+                //if (mode == NavigationMode.New)
+                //{
+                //    var pageState = FrameFacadeInternal.PageStateSettingsService(page.GetType()).Values;
+                //    pageState?.Clear();
+                //}
 
                 var dataContext = ResolveForPage(page);
                 if (dataContext != null)
@@ -176,11 +176,11 @@ namespace Template10.Services.NavigationService
                     dataContext.NavigationService = this;
                     dataContext.Dispatcher = this.GetDispatcherWrapper();
                     dataContext.SessionState = BootStrapper.Current.SessionState;
-                    var pageState = FrameFacadeInternal.PageStateSettingsService(page.GetType()).Values;
+                    var pageState = FrameFacadeInternal.PageStateSettingsService(page.GetType(), parameter: parameter).Values;
                     await dataContext.OnNavigatedToAsync(parameter, mode, pageState);
 
                     // update bindings after NavTo initializes data
-                    XamlUtils.InitializeBindings(page);
+                    //XamlUtils.InitializeBindings(page);
                     XamlUtils.UpdateBindings(page);
                 }
             }
@@ -192,7 +192,13 @@ namespace Template10.Services.NavigationService
             return viewService.OpenAsync(page, parameter, title, size);
         }
 
-        public async Task<bool> NavigateAsync(Type page, object parameter = null, NavigationTransitionInfo infoOverride = null)
+        public Task<ViewLifetimeControl> OpenAsync(Func<UIElement> content, object parameter)
+        {
+            DebugWrite($"Content: {content}, Parameter: {parameter}");
+            return viewService.OpenAsync(content, parameter);
+        }
+
+        public async Task<bool> NavigateAsync(Type page, object parameter = null, IDictionary<string, object> state = null, NavigationTransitionInfo infoOverride = null)
         {
             DebugWrite($"Page: {page}, Parameter: {parameter}, NavigationTransitionInfo: {infoOverride}");
 
@@ -207,17 +213,41 @@ namespace Template10.Services.NavigationService
             if ((page.FullName == CurrentPageType?.FullName) && (parameter?.Equals(CurrentPageParam) ?? false))
                 return false;
 
+            if (state != null)
+            {
+                var pageState = FrameFacadeInternal.PageStateSettingsService(page, 1, parameter).Values;
+                foreach (var item in state)
+                {
+                    pageState[item.Key] = item.Value;
+                }
+            }
+
+            //var frameContent = FrameFacadeInternal.Frame.Content;
+            //if (frameContent is Page current && frameContent is IDisposable disposable && page.FullName == CurrentPageType?.FullName)
+            //{
+            //    if (current.DataContext is INavigable dataContext)
+            //    {
+            //        await NavigatingFromAsync(current, page, parameter, dataContext, false, NavigationMode.Refresh);
+            //        await NavigateFromAsync(current, dataContext, false);
+            //    }
+
+            //    await NavigateToAsync(NavigationMode.Refresh, parameter, current);
+
+            //    FrameFacade.CurrentPageParam = parameter;
+            //    FrameFacade.Frame.BackStack.Add(new PageStackEntry(page, SerializationService.Serialize(CurrentPageParam), infoOverride));
+            //    return true;
+            //}
 
             parameter = SerializationService.Serialize(parameter);
 
             return FrameFacadeInternal.Navigate(page, parameter, infoOverride);
         }
 
-        public void Navigate(Type page, object parameter = null, NavigationTransitionInfo infoOverride = null)
+        public void Navigate(Type page, object parameter = null, IDictionary<string, object> state = null, NavigationTransitionInfo infoOverride = null)
         {
             DebugWrite($"Page: {page}, Parameter: {parameter}, NavigationTransitionInfo: {infoOverride}");
 
-            NavigateAsync(page, parameter, infoOverride).ConfigureAwait(false).GetAwaiter().GetResult();
+            NavigateAsync(page, parameter, state, infoOverride).ConfigureAwait(false).GetAwaiter().GetResult();
         }
 
         /// <summary>
@@ -242,7 +272,7 @@ namespace Template10.Services.NavigationService
         /// NavigationService.Navigate(Pages.MainPage);
         /// </remarks>
         /// <typeparam name="T">T must be the same custom Enum used with BootStrapper.PageKeys()</typeparam>
-        public async Task<bool> NavigateAsync<T>(T key, object parameter = null, NavigationTransitionInfo infoOverride = null)
+        public async Task<bool> NavigateAsync<T>(T key, object parameter = null, IDictionary<string, object> state = null, NavigationTransitionInfo infoOverride = null)
             where T : struct, IConvertible
         {
             DebugWrite($"Key: {key}, Parameter: {parameter}, NavigationTransitionInfo: {infoOverride}");
@@ -254,15 +284,15 @@ namespace Template10.Services.NavigationService
 
             var page = keys[key];
 
-            return await NavigateAsync(page, parameter, infoOverride).ConfigureAwait(false);
+            return await NavigateAsync(page, parameter, state, infoOverride).ConfigureAwait(false);
         }
 
-        public void Navigate<T>(T key, object parameter = null, NavigationTransitionInfo infoOverride = null)
+        public void Navigate<T>(T key, object parameter = null, IDictionary<string, object> state = null, NavigationTransitionInfo infoOverride = null)
             where T : struct, IConvertible
         {
             DebugWrite($"Key: {key}, Parameter: {parameter}, NavigationTransitionInfo: {infoOverride}");
 
-            NavigateAsync(key, parameter, infoOverride).ConfigureAwait(false).GetAwaiter().GetResult();
+            NavigateAsync(key, parameter, state, infoOverride).ConfigureAwait(false).GetAwaiter().GetResult();
         }
 
         public ISerializationService SerializationService { get; set; }
@@ -373,13 +403,34 @@ namespace Template10.Services.NavigationService
 
         public void ClearHistory() { FrameFacadeInternal.Frame.BackStack.Clear(); }
 
-        public void Resuming() { /* nothing */ }
+        public async void Resuming()
+        {
+            DebugWrite($"Frame: {FrameFacadeInternal.FrameId}");
+
+            var page = FrameFacadeInternal.Content as Page;
+            if (page != null)
+            {
+                var dataContext = ResolveForPage(page);
+                if (dataContext != null)
+                {
+                    dataContext.NavigationService = this;
+                    dataContext.Dispatcher = this.GetDispatcherWrapper();
+                    dataContext.SessionState = BootStrapper.Current.SessionState;
+                    var pageState = FrameFacadeInternal.PageStateSettingsService(page.GetType(), parameter: FrameFacadeInternal.CurrentPageParam).Values;
+                    await dataContext.OnNavigatedToAsync(FrameFacadeInternal.CurrentPageParam, NavigationMode.Refresh, pageState);
+
+                    // update bindings after NavTo initializes data
+                    //XamlUtils.InitializeBindings(page);
+                    XamlUtils.UpdateBindings(page);
+                }
+            }
+        }
 
         public async Task SuspendingAsync()
         {
             DebugWrite($"Frame: {FrameFacadeInternal.FrameId}");
 
-            await SaveNavigationAsync();
+            await SaveAsync();
 
             var page = FrameFacadeInternal.Content as Page;
             if (page != null)

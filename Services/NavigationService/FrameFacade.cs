@@ -8,6 +8,8 @@ using Windows.UI.Xaml.Media.Animation;
 using Windows.UI.Xaml.Navigation;
 using Template10.Services.SerializationService;
 using System.Runtime.CompilerServices;
+using Windows.UI.Xaml.Media;
+using System.Diagnostics;
 
 namespace Template10.Services.NavigationService
 {
@@ -16,12 +18,13 @@ namespace Template10.Services.NavigationService
     {
         #region Debug
 
+        [Conditional("DEBUG")]
         static void DebugWrite(string text = null, Services.LoggingService.Severities severity = LoggingService.Severities.Template10, [CallerMemberName]string caller = null) =>
             LoggingService.LoggingService.WriteLine(text, severity, caller: $"{nameof(FrameFacade)}.{caller}");
 
         #endregion
 
-        internal FrameFacade(NavigationService navigationService, Frame frame)
+        internal FrameFacade(NavigationService navigationService, Frame frame, string id)
         {
             NavigationService = navigationService;
             Frame = frame;
@@ -35,6 +38,8 @@ namespace Template10.Services.NavigationService
             };
             Frame.ContentTransitions = new TransitionCollection { };
             Frame.ContentTransitions.Add(t);
+
+            FrameId = id;
         }
 
         public event EventHandler<HandledEventArgs> BackRequested;
@@ -65,7 +70,7 @@ namespace Template10.Services.NavigationService
 
         private ISettingsService FrameStateSettingsService()
         {
-            return SettingsService.SettingsService.Create(SettingsStrategies.Local, GetFrameStateKey(), true);
+            return SettingsService.SettingsService.Create(GetFrameStateKey(), true);
         }
 
         public void SetFrameState(string key, string value)
@@ -83,11 +88,20 @@ namespace Template10.Services.NavigationService
             FrameStateSettingsService().Clear();
         }
 
-        private string GetPageStateKey(string frameId, Type type, int backStackDepth) => $"{frameId}-{type}-{backStackDepth}";
-
-        public ISettingsService PageStateSettingsService(Type type)
+        private string GetPageStateKey(string frameId, Type type, int backStackDepth, object parameter)
         {
-            return FrameStateSettingsService().Open(GetPageStateKey(FrameId, type, BackStackDepth), true);
+            if (FrameStateSettingsService().IsBasicType(parameter))
+            {
+                return $"{frameId}-{type}-{parameter}";
+            }
+
+            return $"{frameId}-{type}-{backStackDepth}";
+        }
+
+        public ISettingsService PageStateSettingsService(Type type, int depth = 0, object parameter = null)
+        {
+            var key = GetPageStateKey(FrameId, type, BackStackDepth + depth, parameter);
+            return FrameStateSettingsService().Open(key, true);
         }
 
         public ISettingsService PageStateSettingsService(string key)
@@ -97,7 +111,7 @@ namespace Template10.Services.NavigationService
 
         public void ClearPageState(Type type)
         {
-            this.FrameStateSettingsService().Remove(GetPageStateKey(FrameId, type, BackStackDepth));
+            this.FrameStateSettingsService().Remove(GetPageStateKey(FrameId, type, BackStackDepth, null));
         }
 
         #endregion
@@ -108,7 +122,7 @@ namespace Template10.Services.NavigationService
 
         public BootStrapper.BackButton BackButtonHandling { get; internal set; }
 
-        public string FrameId { get; set; } = string.Empty;
+        public string FrameId { get; private set; }
 
         internal NavigationService NavigationService { get; set; }
 

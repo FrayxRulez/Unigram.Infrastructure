@@ -13,6 +13,6 @@ namespace Template10.Services.NavigationService
         Task OnNavigatingFromAsync(NavigatingEventArgs args);
         INavigationService NavigationService { get; set; }
         IDispatcherWrapper Dispatcher { get; set; }
-        IStateItems SessionState { get; set; }
+        IDictionary<string, object> SessionState { get; set; }
     }
 }

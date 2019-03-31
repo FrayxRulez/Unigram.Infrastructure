@@ -8,53 +8,57 @@ using Template10.Services.NavigationService;
 using Windows.Graphics.Display;
 using Windows.UI.ViewManagement;
 using Windows.UI.Xaml;
+using System.Diagnostics;
+using Windows.UI.Core;
+using Windows.Foundation.Metadata;
+using Windows.Foundation;
 
 namespace Template10.Common
 {
     // DOCS: https://github.com/Windows-XAML/Template10/wiki/Docs-%7C-WindowWrapper
-    public class WindowWrapper
+    public class WindowContext
     {
         #region Debug
 
+        [Conditional("DEBUG")]
         static void DebugWrite(string text = null, Services.LoggingService.Severities severity = Services.LoggingService.Severities.Template10, [CallerMemberName]string caller = null) =>
             Services.LoggingService.LoggingService.WriteLine(text, severity, caller: $"WindowWrapper.{caller}");
 
         #endregion
 
-        static WindowWrapper()
+        static WindowContext()
         {
             DebugWrite(caller: "Static Constructor");
         }
 
-        public WindowWrapper()
-        {
-            DebugWrite(caller: "Constructor");
-        }
-
-        public static WindowWrapper Default()
+        public static WindowContext Default()
         {
             try
             {
-                var mainDispatcher = CoreApplication.MainView.Dispatcher;
+                //var mainDispatcher = CoreApplication.MainView.Dispatcher;
+                var mainDispatcher = CoreApplication.MainView.CoreWindow.Dispatcher;
                 return ActiveWrappers.FirstOrDefault(x => x.Window.Dispatcher == mainDispatcher) ??
                         ActiveWrappers.FirstOrDefault();
             }
-            catch (COMException)
+            //catch (COMException)
+            catch
             {
                 //MainView might exist but still be not accessible
                 return ActiveWrappers.FirstOrDefault();
             }
         }
 
+        public bool IsInMainView { get; }
+
         public object Content => Dispatcher.Dispatch(() => Window.Content);
 
-        public readonly static List<WindowWrapper> ActiveWrappers = new List<WindowWrapper>();
+        public readonly static List<WindowContext> ActiveWrappers = new List<WindowContext>();
 
-        public static WindowWrapper Current() => ActiveWrappers.FirstOrDefault(x => x.Window == Window.Current) ?? Default();
+        public static WindowContext GetForCurrentView() => ActiveWrappers.FirstOrDefault(x => x.Window == Window.Current) ?? Default();
 
-        public static WindowWrapper Current(Window window) => ActiveWrappers.FirstOrDefault(x => x.Window == window);
+        public static WindowContext Current(Window window) => ActiveWrappers.FirstOrDefault(x => x.Window == window);
 
-        public static WindowWrapper Current(INavigationService nav) => ActiveWrappers.FirstOrDefault(x => x.NavigationServices.Contains(nav));
+        public static WindowContext Current(INavigationService nav) => ActiveWrappers.FirstOrDefault(x => x.NavigationServices.Contains(nav));
 
         public DisplayInformation DisplayInformation() => Dispatcher.Dispatch(() => Windows.Graphics.Display.DisplayInformation.GetForCurrentView());
 
@@ -62,7 +66,7 @@ namespace Template10.Common
 
         public UIViewSettings UIViewSettings() => Dispatcher.Dispatch(() => Windows.UI.ViewManagement.UIViewSettings.GetForCurrentView());
 
-        internal WindowWrapper(Window window)
+        public WindowContext(Window window)
         {
             if (Current(window) != null)
             {
@@ -71,6 +75,7 @@ namespace Template10.Common
             Window = window;
             ActiveWrappers.Add(this);
             Dispatcher = new DispatcherWrapper(window.Dispatcher);
+            IsInMainView = CoreApplication.MainView == CoreApplication.GetCurrentView();
             window.CoreWindow.Closed += (s, e) =>
             {
                 ActiveWrappers.Remove(this);
@@ -79,11 +84,31 @@ namespace Template10.Common
             {
                 ActiveWrappers.Remove(this);
             };
+
+            window.Dispatcher.AcceleratorKeyActivated += Dispatcher_AcceleratorKeyActivated;
         }
 
         public void Close() { Window.Close(); }
         public Window Window { get; }
         public DispatcherWrapper Dispatcher { get; }
         public NavigationServiceList NavigationServices { get; } = new NavigationServiceList();
+
+        public event TypedEventHandler<CoreDispatcher, AcceleratorKeyEventArgs> AcceleratorKeyActivated;
+
+        private void Dispatcher_AcceleratorKeyActivated(CoreDispatcher sender, AcceleratorKeyEventArgs args)
+        {
+            if (AcceleratorKeyActivated is MulticastDelegate multicast)
+            {
+                var list = multicast.GetInvocationList();
+                for (int i = list.Length - 1; i >= 0; i--)
+                {
+                    var result = list[i].DynamicInvoke(sender, args);
+                    if (args.Handled)
+                    {
+                        return;
+                    }
+                }
+            }
+        }
     }
 }

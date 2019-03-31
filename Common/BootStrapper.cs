@@ -6,7 +6,6 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using Template10.Services.NavigationService;
-using Template10.Services.PopupService;
 using Template10.Utils;
 using Windows.ApplicationModel;
 using Windows.ApplicationModel.Activation;
@@ -16,6 +15,12 @@ using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Controls.Primitives;
 using Template10.Services.ViewService;
+using System.Diagnostics;
+using Microsoft.HockeyApp;
+using Windows.UI.Xaml.Media;
+using Windows.ApplicationModel.Core;
+using Windows.System.Profile;
+using Windows.ApplicationModel.ExtendedExecution;
 
 namespace Template10.Common
 {
@@ -43,14 +48,15 @@ namespace Template10.Common
         /// If a developer overrides this method, the developer can resolve DataContext or unwrap DataContext 
         /// available for the Page object when using a MVVM pattern that relies on a wrapped/porxy around ViewModels
         /// </summary>
-        public virtual INavigable ResolveForPage(Page page, NavigationService navigationService) => null;
+        public virtual INavigable ResolveForPage(Page page, INavigationService navigationService) => null;
 
         public static new BootStrapper Current { get; private set; }
 
-        public StateItems SessionState { get; set; } = new StateItems();
+        public IDictionary<string, object> SessionState { get; set; } = new Dictionary<string, object>();
 
         #region Debug
 
+        [Conditional("DEBUG")]
         static void DebugWrite(string text = null, Services.LoggingService.Severities severity = Services.LoggingService.Severities.Template10, [CallerMemberName]string caller = null) =>
             Services.LoggingService.LoggingService.WriteLine(text, severity, caller: $"BootStrapper.{caller}");
 
@@ -70,18 +76,18 @@ namespace Template10.Common
             DebugWrite();
 
             // Hook up keyboard and mouse Back handler
-            var KeyboardService = Services.KeyboardService.KeyboardService.Instance;
-            KeyboardService.AfterBackGesture = () =>
+            var keyboard = Services.KeyboardService.KeyboardService.GetForCurrentView();
+            keyboard.AfterBackGesture = (key) =>
             {
-                DebugWrite(caller: nameof(KeyboardService.AfterBackGesture));
+                DebugWrite(caller: nameof(keyboard.AfterBackGesture));
 
                 var handled = false;
-                RaiseBackRequested(ref handled);
+                RaiseBackRequested(key, ref handled);
             };
 
-            KeyboardService.AfterForwardGesture = () =>
+            keyboard.AfterForwardGesture = () =>
             {
-                DebugWrite(caller: nameof(KeyboardService.AfterForwardGesture));
+                DebugWrite(caller: nameof(keyboard.AfterForwardGesture));
 
                 RaiseForwardRequested();
             };
@@ -90,29 +96,26 @@ namespace Template10.Common
             SystemNavigationManager.GetForCurrentView().BackRequested += BackHandler;
         }
 
-        public event EventHandler<WindowCreatedEventArgs> WindowCreated;
-        protected sealed override void OnWindowCreated(WindowCreatedEventArgs args)
+        protected override void OnWindowCreated(WindowCreatedEventArgs args)
         {
             DebugWrite();
             //should be called to initialize and set new SynchronizationContext
-            if (!WindowWrapper.ActiveWrappers.Any())
+            //if (!WindowWrapper.ActiveWrappers.Any())
                 Loaded();
             // handle window
-            var window = new WindowWrapper(args.Window);
+            var window = CreateWindowWrapper(args.Window);
             ViewService.OnWindowCreated();
-            WindowCreated?.Invoke(this, args);
             base.OnWindowCreated(args);
+        }
+
+        protected virtual WindowContext CreateWindowWrapper(Window window)
+        {
+            return new WindowContext(window);
         }
 
         #region properties
 
-        public INavigationService NavigationService => WindowWrapper.Current().NavigationServices.FirstOrDefault();
-
-        /// <summary>
-        /// The SplashFactory is a Func that returns an instantiated Splash view.
-        /// Template 10 will automatically inject this visual before loading the app.
-        /// </summary>
-        public Func<SplashScreen, UserControl> SplashFactory { get; protected set; }
+        public INavigationService NavigationService => WindowContext.GetForCurrentView().NavigationServices.FirstOrDefault();
 
         /// <summary>
         /// CacheMaxDuration indicates the maximum TimeSpan for which cache data
@@ -206,7 +209,7 @@ namespace Template10.Common
 
             OriginalActivatedArgs = e;
 
-            if (e.PreviousExecutionState != ApplicationExecutionState.Running)
+            if (e.PreviousExecutionState != ApplicationExecutionState.Running || Window.Current.Content == null)
             {
                 try
                 {
@@ -285,7 +288,7 @@ namespace Template10.Common
                 handled = (NavigationService?.CanGoBack == false);
             }
 
-            RaiseBackRequested(ref handled);
+            RaiseBackRequested(Windows.System.VirtualKey.GoBack, ref handled);
             args.Handled = handled;
         }
 
@@ -297,7 +300,7 @@ namespace Template10.Common
         /// Views or Viewodels can override this behavior by handling the BackRequested 
         /// event and setting the Handled property of the BackRequestedEventArgs to true.
         /// </summary>
-        private void RaiseBackRequested(ref bool handled)
+        private void RaiseBackRequested(Windows.System.VirtualKey key, ref bool handled)
         {
             DebugWrite();
 
@@ -305,13 +308,48 @@ namespace Template10.Common
             BackRequested?.Invoke(null, args);
             if (handled = args.Handled)
                 return;
-            foreach (var frame in WindowWrapper.Current().NavigationServices.Select(x => x.FrameFacade).Reverse())
+
+            var popups = VisualTreeHelper.GetOpenPopups(Window.Current);
+            foreach (var popup in popups)
+            {
+                if (popup.Child is INavigablePage page)
+                {
+                    if (key == Windows.System.VirtualKey.Escape)
+                    {
+                        args.Handled = true;
+                    }
+                    else
+                    {
+                        page.OnBackRequested(args);
+                    }
+
+                    if (handled = args.Handled)
+                        return;
+                }
+                else if (popup.Child is ContentDialog dialog)
+                {
+                    dialog.Hide();
+                    return;
+                }
+                else if (key == Windows.System.VirtualKey.Escape)
+                {
+                    handled = args.Handled = true;
+                    return;
+                }
+            }
+
+            foreach (var frame in WindowContext.GetForCurrentView().NavigationServices.Select(x => x.FrameFacade).Reverse())
             {
                 frame.RaiseBackRequested(args);
+
                 if (handled = args.Handled)
                     return;
             }
-            NavigationService.GoBack();
+
+            if (NavigationService?.CanGoBack ?? false)
+            {
+                NavigationService?.GoBack();
+            }
         }
 
         // this event precedes the in-frame event by the same name
@@ -325,13 +363,14 @@ namespace Template10.Common
             ForwardRequested?.Invoke(null, args);
             if (args.Handled)
                 return;
-            foreach (var frame in WindowWrapper.Current().NavigationServices.Select(x => x.FrameFacade))
+            foreach (var frame in WindowContext.GetForCurrentView().NavigationServices.Select(x => x.FrameFacade))
             {
                 frame.RaiseForwardRequested(args);
                 if (args.Handled)
                     return;
             }
-            NavigationService.GoForward();
+
+            NavigationService?.GoForward();
         }
 
         public void UpdateShellBackButton()
@@ -440,21 +479,21 @@ namespace Template10.Common
         /// A developer should call this when creating a new/secondary frame.
         /// The shell back button should only be setup one time.
         /// </summary>
-        public INavigationService NavigationServiceFactory(BackButton backButton, ExistingContent existingContent)
+        public INavigationService NavigationServiceFactory(BackButton backButton, ExistingContent existingContent, int session, string id, bool root)
         {
             DebugWrite($"{nameof(backButton)}:{backButton} {nameof(ExistingContent)}:{existingContent}");
 
-            return NavigationServiceFactory(backButton, existingContent, new Frame());
+            return NavigationServiceFactory(backButton, existingContent, new Frame(), session, id, root);
         }
 
         /// <summary>
         /// Creates the NavigationService instance for given Frame.
         /// </summary>
-        protected virtual INavigationService CreateNavigationService(Frame frame)
+        protected virtual INavigationService CreateNavigationService(Frame frame, int session, string id, bool root)
         {
             DebugWrite($"Frame:{frame}");
 
-            return new NavigationService(frame);
+            return new NavigationService(frame, session, id);
         }
 
         /// <summary>
@@ -464,22 +503,22 @@ namespace Template10.Common
         /// A developer should call this when creating a new/secondary frame.
         /// The shell back button should only be setup one time.
         /// </summary>
-        public INavigationService NavigationServiceFactory(BackButton backButton, ExistingContent existingContent, Frame frame)
+        public INavigationService NavigationServiceFactory(BackButton backButton, ExistingContent existingContent, Frame frame, int session, string id, bool root)
         {
             DebugWrite($"{nameof(backButton)}:{backButton} {nameof(existingContent)}:{existingContent} {nameof(frame)}:{frame}");
 
             frame.Content = (existingContent == ExistingContent.Include) ? Window.Current.Content : null;
 
             // if the service already exists for this frame, use the existing one.
-            foreach (var nav in WindowWrapper.ActiveWrappers.SelectMany(x => x.NavigationServices))
+            foreach (var nav in WindowContext.ActiveWrappers.SelectMany(x => x.NavigationServices))
             {
                 if (nav.FrameFacade.Frame.Equals(frame))
                     return nav as INavigationService;
             }
 
-            var navigationService = CreateNavigationService(frame);
+            var navigationService = CreateNavigationService(frame, session, id, root);
             navigationService.FrameFacade.BackButtonHandling = backButton;
-            WindowWrapper.Current().NavigationServices.Add(navigationService);
+            WindowContext.GetForCurrentView().NavigationServices.Add(navigationService);
 
             if (backButton == BackButton.Attach)
             {
@@ -487,11 +526,11 @@ namespace Template10.Common
 
                 // update shell back when backstack changes
                 // only the default frame in this case because secondary should not dismiss the app
-                frame.RegisterPropertyChangedCallback(Frame.BackStackDepthProperty, (s, args) => UpdateShellBackButton());
+                //frame.RegisterPropertyChangedCallback(Frame.BackStackDepthProperty, (s, args) => UpdateShellBackButton());
 
                 // update shell back when navigation occurs
                 // only the default frame in this case because secondary should not dismiss the app
-                frame.Navigated += (s, args) => UpdateShellBackButton();
+                //frame.Navigated += (s, args) => UpdateShellBackButton();
             }
 
             // this is always okay to check, default or not
@@ -505,7 +544,7 @@ namespace Template10.Common
                 if (cacheAge >= CacheMaxDuration)
                 {
                     // clear state in every nav service in every view
-                    foreach (var nav in WindowWrapper.ActiveWrappers.SelectMany(x => x.NavigationServices))
+                    foreach (var nav in WindowContext.ActiveWrappers.SelectMany(x => x.NavigationServices))
                     {
                         nav.FrameFacade.ClearFrameState();
                     }
@@ -555,11 +594,9 @@ namespace Template10.Common
 
             DebugWrite($"{nameof(IActivatedEventArgs)}:{e.Kind}");
 
-            CallShowSplashScreen(e);
             await CallOnInitializeAsync(false, e);
-            SetupCustomTitleBar();
 
-            if (_SplashLogic.Splashing || Window.Current.Content == null)
+            if (Window.Current.Content == null)
             {
                 Window.Current.Content = CreateRootElement(e);
             }
@@ -574,7 +611,7 @@ namespace Template10.Common
         WindowLogic _WindowLogic = new WindowLogic();
         private void CallActivateWindow(WindowLogic.ActivateWindowSources source)
         {
-            _WindowLogic.ActivateWindow(source, _SplashLogic);
+            _WindowLogic.ActivateWindow(source);
             CurrentState = States.Running;
         }
 
@@ -584,48 +621,9 @@ namespace Template10.Common
         ///  By default, Template 10 will setup the root element to be a Template 10
         ///  Modal Dialog control. If you desire something different, you can set it here.
         /// </summary>
-        public virtual UIElement CreateRootElement(IActivatedEventArgs e)
-        {
-            var navigationService = Current.NavigationServiceFactory(BackButton.Attach, ExistingContent.Include, new Frame());
-            return new Controls.ModalDialog
-            {
-                DisableBackButtonWhenModal = true,
-                Content = navigationService.Frame
-            };
-        }
+        public abstract UIElement CreateRootElement(IActivatedEventArgs e);
 
-        private void SetupCustomTitleBar()
-        {
-            InitResourceDueToPlatformBug();
-
-            // this wonky style of loop is important due to a platform bug
-            int count = Application.Current.Resources.Count;
-            foreach (var resource in Application.Current.Resources)
-            {
-                var key = resource.Key;
-                if (key == typeof(Controls.CustomTitleBar))
-                {
-                    var style = resource.Value as Style;
-                    var title = new Controls.CustomTitleBar();
-                    title.Style = style;
-                }
-                count--;
-                if (count == 0) break;
-            }
-        }
-
-        private static void InitResourceDueToPlatformBug()
-        {
-            // this "unused" bit is very important because of a quirk in ResourceThemes
-            try
-            {
-                if (Application.Current.Resources.ContainsKey("ExtendedSplashBackground"))
-                {
-                    var unused = Application.Current.Resources["ExtendedSplashBackground"];
-                }
-            }
-            catch { /* this is okay */ }
-        }
+        public abstract UIElement CreateRootElement(Frame frame);
 
         private async Task CallOnInitializeAsync(bool canRepeat, IActivatedEventArgs e)
         {
@@ -656,28 +654,10 @@ namespace Template10.Common
             CurrentState = States.AfterStart;
         }
 
-        SplashLogic _SplashLogic = new SplashLogic();
-        private void CallShowSplashScreen(IActivatedEventArgs e)
-        {
-            DebugWrite();
-
-            _SplashLogic.Show(e.SplashScreen, SplashFactory, _WindowLogic);
-        }
-
-        [Obsolete("Use RootElementFactory.", true)]
-        protected virtual Frame CreateRootFrame(IActivatedEventArgs e)
-        {
-            DebugWrite($"{nameof(IActivatedEventArgs)}:{e}");
-
-            return new Frame();
-        }
-
         #endregion
 
         #region lifecycle logic
 
-        [Obsolete("Use AutoRestoreAfterTerminated")]
-        public bool EnableAutoRestoreAfterTerminated { get; set; } = true;
         public bool AutoRestoreAfterTerminated { get; set; } = true;
         public bool AutoExtendExecutionSession { get; set; } = true;
         public bool AutoSuspendAllFrames { get; set; } = true;
@@ -687,23 +667,43 @@ namespace Template10.Common
         {
             DebugWrite(caller: nameof(Resuming));
 
-            var args = OriginalActivatedArgs as LaunchActivatedEventArgs;
-            if (args?.PrelaunchActivated ?? true)
+            try
             {
-                OnResuming(sender, e, AppExecutionState.Prelaunch);
-                var kind = args?.PreviousExecutionState == ApplicationExecutionState.Running ? StartKind.Activate : StartKind.Launch;
-                await CallOnStartAsync(false, kind);
-                CallActivateWindow(WindowLogic.ActivateWindowSources.Resuming);
+                var args = OriginalActivatedArgs as LaunchActivatedEventArgs;
+                if (args?.PrelaunchActivated ?? true)
+                {
+                    OnResuming(sender, e, AppExecutionState.Prelaunch);
+                    var kind = args?.PreviousExecutionState == ApplicationExecutionState.Running ? StartKind.Activate : StartKind.Launch;
+                    await CallOnStartAsync(false, kind);
+                    CallActivateWindow(WindowLogic.ActivateWindowSources.Resuming);
+                }
+                else
+                {
+                    OnResuming(sender, e, AppExecutionState.Suspended);
+
+                    //var services = WindowContext.ActiveWrappers.SelectMany(x => x.NavigationServices).Where(x => x.IsInMainView);
+                    //foreach (INavigationService nav in services)
+                    //{
+                    //    try
+                    //    {
+                    //        // call view model suspend (OnNavigatedfrom)
+                    //        // date the cache (which marks the date/time it was suspended)
+                    //        DebugWrite($"Nav.FrameId:{nav.FrameFacade.FrameId}");
+                    //        await (nav as INavigationService).GetDispatcherWrapper().DispatchAsync(() => nav.Resuming());
+                    //    }
+                    //    catch (Exception ex)
+                    //    {
+                    //        DebugWrite($"FrameId: [{nav.FrameFacade.FrameId}] {ex} {ex.Message}", caller: nameof(Resuming));
+                    //    }
+                    //}
+                }
             }
-            else
-            {
-                OnResuming(sender, e, AppExecutionState.Suspended);
-            }
+            catch { }
         }
 
         private async Task<bool> CallAutoRestoreAsync(ILaunchActivatedEventArgs e, bool restored)
         {
-            if (!EnableAutoRestoreAfterTerminated || !AutoRestoreAfterTerminated)
+            if (!AutoRestoreAfterTerminated)
                 return false;
             return await _LifecycleLogic.AutoRestoreAsync(e, NavigationService);
         }
@@ -726,11 +726,6 @@ namespace Template10.Common
         }
 
         #endregion
-
-        // The default frame is automatically wrapped in a modal dialog.
-        // this is how you access it to set ModalContent or the IsModal property. 
-        public Controls.ModalDialog ModalDialog { get { return (Window.Current.Content as Controls.ModalDialog); } }
-        public UIElement ModalContent { get { return ModalDialog?.ModalContent; } set { if (ModalDialog != null) ModalDialog.ModalContent = value; } }
 
         public enum BackButton { Attach, Ignore }
 
@@ -795,8 +790,8 @@ namespace Template10.Common
                 var launchedEvent = e as ILaunchActivatedEventArgs;
                 if (DetermineStartCause(e) == AdditionalKinds.Primary || launchedEvent?.TileId == "")
                 {
-                    restored = await nav.RestoreSavedNavigationAsync();
-                    DebugWrite($"{nameof(restored)}:{restored}", caller: nameof(nav.RestoreSavedNavigationAsync));
+                    restored = await nav.LoadAsync();
+                    DebugWrite($"{nameof(restored)}:{restored}", caller: nameof(nav.LoadAsync));
                 }
                 return restored;
             }
@@ -805,13 +800,9 @@ namespace Template10.Common
             {
                 DebugWrite($"autoExtendExecutionSession: {autoExtendExecutionSession}");
 
-                if (autoExtendExecutionSession)
+                if (autoExtendExecutionSession /*&& AnalyticsInfo.VersionInfo.DeviceFamily != "Windows.Desktop"*/)
                 {
-                    using (var session = new Windows.ApplicationModel.ExtendedExecution.ExtendedExecutionSession
-                    {
-                        Description = GetType().ToString(),
-                        Reason = Windows.ApplicationModel.ExtendedExecution.ExtendedExecutionReason.SavingData
-                    })
+                    using (var session = new ExtendedExecutionSession { Reason = ExtendedExecutionReason.SavingData })
                     {
                         await SuspendAllFramesAsync();
                     }
@@ -827,7 +818,7 @@ namespace Template10.Common
                 DebugWrite();
 
                 //allow only main view NavigationService as others won't be able to use Dispatcher and processing will stuck
-                var services = WindowWrapper.ActiveWrappers.SelectMany(x => x.NavigationServices).Where(x => x.IsInMainView);
+                var services = WindowContext.ActiveWrappers.SelectMany(x => x.NavigationServices).Where(x => x.IsInMainView);
                 foreach (INavigationService nav in services)
                 {
                     try
@@ -855,39 +846,17 @@ namespace Template10.Common
             /// One scenario might be a delayed activation for Splash Screen.
             /// </summary>
             /// <param name="source">Reason for the call from Template 10</param>
-            public void ActivateWindow(ActivateWindowSources source, SplashLogic splashLogic)
+            public void ActivateWindow(ActivateWindowSources source)
             {
                 DebugWrite($"source:{source}");
-
-                if (source != ActivateWindowSources.SplashScreen)
-                {
-                    splashLogic.Hide();
-                }
 
                 Window.Current.Activate();
             }
         }
+    }
 
-        private class SplashLogic
-        {
-            private Popup popup;
-
-            public void Show(SplashScreen splashScreen, Func<SplashScreen, UserControl> splashFactory, WindowLogic windowLogic)
-            {
-                if (splashFactory == null)
-                    return;
-                var splash = splashFactory(splashScreen);
-                var service = new PopupService();
-                popup = service.Show(PopupService.PopupSize.FullScreen, splash);
-                windowLogic.ActivateWindow(WindowLogic.ActivateWindowSources.SplashScreen, this);
-            }
-
-            public void Hide()
-            {
-                popup?.Hide();
-            }
-
-            public bool Splashing => popup?.IsOpen ?? false;
-        }
+    public interface INavigablePage
+    {
+        void OnBackRequested(HandledEventArgs args);
     }
 }

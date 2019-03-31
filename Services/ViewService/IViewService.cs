@@ -2,6 +2,7 @@
 using System.Threading.Tasks;
 using Windows.UI.Core;
 using Windows.UI.ViewManagement;
+using Windows.UI.Xaml;
 
 namespace Template10.Services.ViewService
 {
@@ -17,5 +18,7 @@ namespace Template10.Services.ViewService
         /// <returns><see cref="ViewLifetimeControl"/> object that is associated to newly created view. Use it to subscribe to <code>Released</code> event to close window manually.
         /// It won't not be called before all previously started async operations on <see cref="CoreDispatcher"/> complete. <remarks>DO NOT call operations on Dispatcher after this</remarks></returns>
         Task<ViewLifetimeControl> OpenAsync(Type page, object parameter = null, string title = null, ViewSizePreference size = ViewSizePreference.UseHalf);
+
+        Task<ViewLifetimeControl> OpenAsync(Func<UIElement> content, object parameter, double width = 340, double height = 200);
     }
 }

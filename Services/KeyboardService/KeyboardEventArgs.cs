@@ -17,18 +17,16 @@ namespace Template10.Services.KeyboardService
         public bool ShiftKey { get; set; }
         public VirtualKey VirtualKey { get; set; }
         public AcceleratorKeyEventArgs EventArgs { get; set; }
-        public char? Character { get; set; }
         public bool WindowsKey { get; internal set; }
 
         public bool OnlyWindows => WindowsKey & !AltKey & !ControlKey & !ShiftKey;
         public bool OnlyAlt => !WindowsKey & AltKey & !ControlKey & !ShiftKey;
         public bool OnlyControl => !WindowsKey & !AltKey & ControlKey & !ShiftKey;
         public bool OnlyShift => !WindowsKey & !AltKey & !ControlKey & ShiftKey;
-        public bool Combo => new[] { AltKey, ControlKey, ShiftKey }.Any(x => x) & Character.HasValue;
 
         public override string ToString()
         {
-            return $"KeyboardEventArgs = Handled {Handled}, AltKey {AltKey}, ControlKey {ControlKey}, ShiftKey {ShiftKey}, VirtualKey {VirtualKey}, Character {Character}, WindowsKey {WindowsKey}, OnlyWindows {OnlyWindows}, OnlyAlt {OnlyAlt}, OnlyControl {OnlyControl}, OnlyShift {OnlyShift}";
+            return $"KeyboardEventArgs = Handled {Handled}, AltKey {AltKey}, ControlKey {ControlKey}, ShiftKey {ShiftKey}, VirtualKey {VirtualKey}, WindowsKey {WindowsKey}, OnlyWindows {OnlyWindows}, OnlyAlt {OnlyAlt}, OnlyControl {OnlyControl}, OnlyShift {OnlyShift}";
         }
     }
 }

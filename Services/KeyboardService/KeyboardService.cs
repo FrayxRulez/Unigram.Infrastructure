@@ -1,6 +1,9 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
+using Windows.UI.ViewManagement;
+using Windows.UI.Xaml;
 
 namespace Template10.Services.KeyboardService
 {
@@ -8,6 +11,7 @@ namespace Template10.Services.KeyboardService
     {
         #region Debug
 
+        [Conditional("DEBUG")]
         static void DebugWrite(string text = null, Services.LoggingService.Severities severity = LoggingService.Severities.Template10, [CallerMemberName]string caller = null) =>
             LoggingService.LoggingService.WriteLine(text, severity, caller: $"{nameof(KeyboardService)}.{caller}");
 
@@ -15,59 +19,64 @@ namespace Template10.Services.KeyboardService
 
         KeyboardHelper _helper;
 
-        public static KeyboardService Instance { get; private set; } = new KeyboardService();
+        private static Dictionary<int, KeyboardService> _windowContext = new Dictionary<int, KeyboardService>();
+        public static KeyboardService GetForCurrentView()
+        {
+            var id = ApplicationView.GetApplicationViewIdForWindow(Window.Current.CoreWindow);
+            if (_windowContext.TryGetValue(id, out KeyboardService value))
+            {
+                return value;
+            }
+
+            var context = new KeyboardService();
+            _windowContext[id] = context;
+
+            return context;
+        }
 
         private KeyboardService()
         {
             _helper = new KeyboardHelper();
-            _helper.KeyDown = async (e) =>
+            _helper.KeyDown = e =>
             {
                 e.Handled = true;
 
-                // use this to place focus in search box
-                 if (e.OnlyControl && e.Character.ToString().ToLower().Equals("e"))
-                {
-                    DebugWrite("Control+E", caller: nameof(AfterControlEGesture));
-                    AfterControlEGesture?.Invoke();
-                }
-
                 // use this to nav back
-                else if (e.VirtualKey == Windows.System.VirtualKey.GoBack)
+                if (e.VirtualKey == Windows.System.VirtualKey.GoBack)
                 {
                     DebugWrite("GoBack", caller: nameof(AfterBackGesture));
-                    AfterBackGesture?.Invoke();
+                    AfterBackGesture?.Invoke(e.VirtualKey);
                 }
-
                 else if (e.VirtualKey == Windows.System.VirtualKey.NavigationLeft)
                 {
                     DebugWrite("NavigationLeft", caller: nameof(AfterBackGesture));
-                    AfterBackGesture?.Invoke();
+                    AfterBackGesture?.Invoke(e.VirtualKey);
                 }
-
                 else if (e.VirtualKey == Windows.System.VirtualKey.GamepadMenu)
                 {
                     DebugWrite("GamepadMenu", caller: nameof(AfterMenuGesture));
                     AfterMenuGesture?.Invoke();
                 }
-
                 else if (e.VirtualKey == Windows.System.VirtualKey.GamepadLeftShoulder)
                 {
                     DebugWrite("GamepadLeftShoulder", caller: nameof(AfterBackGesture));
-                    AfterBackGesture?.Invoke();
+                    AfterBackGesture?.Invoke(e.VirtualKey);
                 }
-
                 else if (e.OnlyAlt && e.VirtualKey == Windows.System.VirtualKey.Back)
                 {
                     DebugWrite("Alt+Back", caller: nameof(AfterBackGesture));
-                    AfterBackGesture?.Invoke();
+                    AfterBackGesture?.Invoke(e.VirtualKey);
                 }
-
                 else if (e.OnlyAlt && e.VirtualKey == Windows.System.VirtualKey.Left)
                 {
                     DebugWrite("Alt+Left", caller: nameof(AfterBackGesture));
-                    AfterBackGesture?.Invoke();
+                    AfterBackGesture?.Invoke(e.VirtualKey);
                 }
-
+                else if (e.VirtualKey == Windows.System.VirtualKey.Escape)
+                {
+                    DebugWrite("Escape", caller: nameof(AfterBackGesture));
+                    AfterBackGesture?.Invoke(e.VirtualKey);
+                }
                 // use this to nav forward
                 else if (e.VirtualKey == Windows.System.VirtualKey.GoForward)
                 {
@@ -90,36 +99,16 @@ namespace Template10.Services.KeyboardService
                     AfterForwardGesture?.Invoke();
                 }
 
-                // about
-                else if (e.AltKey && e.ControlKey && e.ShiftKey && e.VirtualKey == Windows.System.VirtualKey.F12)
-                {
-                    var open = new Action(async () => { await Windows.System.Launcher.LaunchUriAsync(new Uri("http://aka.ms/template10")); });
-                    var about = new Windows.UI.Xaml.Controls.ContentDialog
-                    {
-                        Title = "Template 10",
-                        PrimaryButtonText = "Info",
-                        PrimaryButtonCommand = new Mvvm.DelegateCommand(open),
-                        SecondaryButtonText = "Close"
-                    };
-
-                    try
-                    {
-                        await about.ShowAsync();
-                    }
-                    catch (System.Runtime.InteropServices.COMException)
-                    {
-                        DebugWrite("About dialog already showing");
-                    }
-                }
-
                 // anything else
                 else
+                {
                     e.Handled = false;
+                }
             };
             _helper.PointerGoBackGestured = () =>
             {
                 DebugWrite(caller: nameof(KeyboardHelper.PointerGoBackGestured));
-                AfterBackGesture?.Invoke();
+                AfterBackGesture?.Invoke(Windows.System.VirtualKey.GoBack);
             };
             _helper.PointerGoForwardGestured = () =>
             {
@@ -128,9 +117,8 @@ namespace Template10.Services.KeyboardService
             };
         }
 
-        public Action AfterBackGesture { get; set; }
+        public Action<Windows.System.VirtualKey> AfterBackGesture { get; set; }
         public Action AfterForwardGesture { get; set; }
-        public Action AfterControlEGesture { get; set; }
         public Action AfterMenuGesture { get; set; }
     }
 

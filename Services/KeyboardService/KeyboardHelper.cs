@@ -15,8 +15,8 @@ namespace Template10.Services.KeyboardService
         CoreWindow win = Window.Current.CoreWindow;
         public KeyboardHelper()
         {
-           win.Dispatcher.AcceleratorKeyActivated += CoreDispatcher_AcceleratorKeyActivated;
-           win.PointerPressed += CoreWindow_PointerPressed;
+            win.Dispatcher.AcceleratorKeyActivated += CoreDispatcher_AcceleratorKeyActivated;
+            win.PointerPressed += CoreWindow_PointerPressed;
         }
 
         public void Cleanup()
@@ -27,16 +27,18 @@ namespace Template10.Services.KeyboardService
 
         private void CoreDispatcher_AcceleratorKeyActivated(CoreDispatcher sender, AcceleratorKeyEventArgs e)
         {
-            if (e.EventType.ToString().Contains("Down") && !e.Handled)
+            if (e.EventType != CoreAcceleratorKeyEventType.KeyDown && e.EventType != CoreAcceleratorKeyEventType.SystemKeyDown || e.Handled)
             {
-                var args = KeyboardEventArgs(e.VirtualKey);
-                args.EventArgs = e;
+                return;
+            }
 
-                try { KeyDown?.Invoke(args); }
-                finally
-                {
-                    e.Handled = e.Handled;
-                }
+            var args = KeyboardEventArgs(e.VirtualKey);
+            args.EventArgs = e;
+
+            try { KeyDown?.Invoke(args); }
+            finally
+            {
+                e.Handled = e.Handled;
             }
         }
 
@@ -55,8 +57,7 @@ namespace Template10.Services.KeyboardService
                 ControlKey = control,
                 ShiftKey = shift,
                 WindowsKey = windows,
-                VirtualKey = key,
-                Character = ToChar(key, shift),
+                VirtualKey = key
             };
         }
 
@@ -100,47 +101,5 @@ namespace Template10.Services.KeyboardService
             try { PointerGoBackGestured?.Invoke(); }
             catch { }
         }
-
-        private static char? ToChar(VirtualKey key, bool shift)
-        {
-            // convert virtual key to char
-            if (32 == (int)key)
-                return ' ';
-
-            VirtualKey search;
-
-            // look for simple letter
-            foreach (var letter in "ABCDEFGHIJKLMNOPQRSTUVWXYZ")
-            {
-                if (Enum.TryParse<VirtualKey>(letter.ToString(), out search) && search.Equals(key))
-                    return (shift) ? letter : letter.ToString().ToLower()[0];
-            }
-
-            // look for simple number
-            foreach (var number in "1234567890")
-            {
-                if (Enum.TryParse<VirtualKey>("Number" + number.ToString(), out search) && search.Equals(key))
-                    return number;
-            }
-
-            // not found
-            return null;
-        }
     }
-
-    enum VKeyClass_EnUs
-    {
-        Control, // 0-31, 33-47, 91-95, 144-165
-        Character, // 32, 48-90
-        NumPad, // 96-111
-        Function // 112 - 135
-    }
-
-    public enum VKeyCharacterClass
-    {
-        Space,
-        Numeric,
-        Alphabetic
-    }
-
 }

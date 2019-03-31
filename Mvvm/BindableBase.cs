@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Microsoft.HockeyApp;
+using System;
 using System.ComponentModel;
 using System.Linq.Expressions;
 using System.Reflection;
@@ -32,21 +33,30 @@ namespace Template10.Mvvm
             if (!object.Equals(handler, null))
             {
                 var args = new PropertyChangedEventArgs(propertyName);
-                var dispatcher = WindowWrapper.Current().Dispatcher;
-                if (dispatcher.HasThreadAccess())
+                //var dispatcher = WindowWrapper.Current().Dispatcher;
+                //if (dispatcher.HasThreadAccess())
+                //{
+                //    try
+                //    {
+                //        handler.Invoke(this, args);
+                //    }
+                //    catch
+                //    {
+                //        dispatcher.Dispatch(() => handler.Invoke(this, args));
+                //    }
+                //}
+                //else
+                //{
+                //    dispatcher.Dispatch(() => handler.Invoke(this, args));
+                //}
+
+                try
                 {
-                    try
-                    {
-                        handler.Invoke(this, args);
-                    }
-                    catch
-                    {
-                        dispatcher.Dispatch(() => handler.Invoke(this, args));
-                    }
+                    handler(this, args);
                 }
-                else
+                catch (Exception ex)
                 {
-                    dispatcher.Dispatch(() => handler.Invoke(this, args));
+                    HockeyClient.Current.TrackException(ex);
                 }
             }
         }
@@ -73,21 +83,30 @@ namespace Template10.Mvvm
                 if (!object.Equals(propertyName, null))
                 {
                     var args = new PropertyChangedEventArgs(propertyName);
-                    var dispatcher = WindowWrapper.Current().Dispatcher;
-                    if (dispatcher.HasThreadAccess())
+                    //var dispatcher = WindowWrapper.Current().Dispatcher;
+                    //if (dispatcher.HasThreadAccess())
+                    //{
+                    //    try
+                    //    {
+                    //        handler.Invoke(this, args);
+                    //    }
+                    //    catch
+                    //    {
+                    //        dispatcher.Dispatch(() => handler.Invoke(this, args));
+                    //    }
+                    //}
+                    //else
+                    //{
+                    //    dispatcher.Dispatch(() => handler.Invoke(this, args));
+                    //}
+
+                    try
                     {
-                        try
-                        {
-                            handler.Invoke(this, args);
-                        }
-                        catch
-                        {
-                            dispatcher.Dispatch(() => handler.Invoke(this, args));
-                        }
+                        handler(this, args);
                     }
-                    else
+                    catch (Exception ex)
                     {
-                        dispatcher.Dispatch(() => handler.Invoke(this, args));
+                        HockeyClient.Current.TrackException(ex);
                     }
                 }
             }

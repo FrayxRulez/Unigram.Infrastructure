@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text;
@@ -13,14 +14,15 @@ namespace Template10.Common
     {
         #region Debug
 
+        [Conditional("DEBUG")]
         static void DebugWrite(string text = null, Services.LoggingService.Severities severity = Services.LoggingService.Severities.Template10, [CallerMemberName]string caller = null) =>
             Services.LoggingService.LoggingService.WriteLine(text, severity, caller: $"DispatcherWrapper.{caller}");
 
         #endregion
 
-        public static IDispatcherWrapper Current() => WindowWrapper.Current().Dispatcher;
+        public static IDispatcherWrapper Current() => WindowContext.GetForCurrentView().Dispatcher;
 
-        internal DispatcherWrapper(CoreDispatcher dispatcher)
+        public DispatcherWrapper(CoreDispatcher dispatcher)
         {
             DebugWrite(caller: "Constructor");
             this.dispatcher = dispatcher;

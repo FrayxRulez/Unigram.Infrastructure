@@ -78,7 +78,7 @@ namespace Template10.Services.ViewService
         #endregion
 
         #region WindowWrapper
-        public WindowWrapper WindowWrapper { get; }
+        public WindowContext WindowWrapper { get; }
         #endregion
 
         #region NavigationService
@@ -88,7 +88,7 @@ namespace Template10.Services.ViewService
         private ViewLifetimeControl(CoreWindow newWindow)
         {
             CoreDispatcher = newWindow.Dispatcher;
-            WindowWrapper = WindowWrapper.Current(Window.Current);
+            WindowWrapper = WindowContext.Current(Window.Current);
             Id = ApplicationView.GetApplicationViewIdForWindow(newWindow);
 
             // This class will automatically tell the view when its time to close
@@ -103,7 +103,11 @@ namespace Template10.Services.ViewService
 
         private void UnregisterForEvents()
         {
-            ApplicationView.GetForCurrentView().Consolidated -= ViewConsolidated;
+            try
+            {
+                ApplicationView.GetForCurrentView().Consolidated -= ViewConsolidated;
+            }
+            catch { }
         }
 
         // A view is consolidated with other views hen there's no way for the user to get to it (it's not in the list of recently used apps, cannot be

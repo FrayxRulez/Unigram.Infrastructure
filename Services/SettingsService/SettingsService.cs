@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Text;
+using Windows.Foundation;
 using Windows.Foundation.Collections;
 using Windows.Storage;
 
@@ -11,12 +12,6 @@ namespace Template10.Services.SettingsService
     // https://github.com/Windows-XAML/Template10/wiki/Docs-%7C-SettingsService
     public class SettingsService : ISettingsService
     {
-        private static ISettingsService _local;
-        public static ISettingsService Local => _local ?? (_local = Create(SettingsStrategies.Local));
-
-        private static ISettingsService _roaming;
-        public static ISettingsService Roaming => _roaming ?? (_roaming = Create(SettingsStrategies.Roam));
-
         /// <summary>
         /// Creates an <c>ISettingsService</c> object targeting the requested (optional) <paramref name="folderName"/>
         /// in the <paramref name="strategy"/> container.
@@ -25,61 +20,58 @@ namespace Template10.Services.SettingsService
         /// <param name="folderName">Name of the settings folder to use</param>
         /// <param name="createFolderIfNotExists"><c>true</c> to create the folder if it isn't already there, false otherwise.</param>
         /// <returns></returns>
-        public static ISettingsService Create(SettingsStrategies strategy, string folderName = null, bool createFolderIfNotExists = true)
+        public static ISettingsService Create(string folderName = null, bool createFolderIfNotExists = true)
         {
-            ApplicationDataContainer rootContainer;
-            switch (strategy)
-            {
-                case SettingsStrategies.Local:
-                    rootContainer = ApplicationData.Current.LocalSettings;
-                    break;
-                case SettingsStrategies.Roam:
-                    rootContainer = ApplicationData.Current.RoamingSettings;
-                    break;
-                default:
-                    throw new ArgumentException($"Unsupported Settings Strategy: {strategy}", nameof(strategy));
-            }
+            //ApplicationDataContainer rootContainer;
+            //switch (strategy)
+            //{
+            //    case SettingsStrategies.Local:
+            //        rootContainer = ApplicationData.Current.LocalSettings;
+            //        break;
+            //    case SettingsStrategies.Roam:
+            //        rootContainer = ApplicationData.Current.RoamingSettings;
+            //        break;
+            //    default:
+            //        throw new ArgumentException($"Unsupported Settings Strategy: {strategy}", nameof(strategy));
+            //}
 
-            ApplicationDataContainer targetContainer = rootContainer;
-            if (!string.IsNullOrWhiteSpace(folderName))
-            {
-                try
-                {
-                    targetContainer = rootContainer.CreateContainer(folderName, createFolderIfNotExists ? ApplicationDataCreateDisposition.Always : ApplicationDataCreateDisposition.Existing);
-                }
-                catch (Exception)
-                {
-                    throw new KeyNotFoundException($"No folder exists named '{folderName}'");
-                }
-            }
+            //ApplicationDataContainer targetContainer = rootContainer;
+            //if (!string.IsNullOrWhiteSpace(folderName))
+            //{
+            //    try
+            //    {
+            //        targetContainer = rootContainer.CreateContainer(folderName, createFolderIfNotExists ? ApplicationDataCreateDisposition.Always : ApplicationDataCreateDisposition.Existing);
+            //    }
+            //    catch (Exception)
+            //    {
+            //        throw new KeyNotFoundException($"No folder exists named '{folderName}'");
+            //    }
+            //}
 
-            return new SettingsService(targetContainer);
+            //return new SettingsService(targetContainer);
+            return new SettingsService(new Dictionary<string, object>());
         }
 
-        protected ApplicationDataContainer Container { get; private set; }
-        public IPropertySet Values { get; private set; }
+        public IDictionary<string, object> Values { get; private set; }
 
         public IPropertyMapping Converters { get; set; } = new JsonMapping();
 
-        private SettingsService(ApplicationDataContainer container)
+        private static Dictionary<string, IDictionary<string, object>> _keys = new Dictionary<string, IDictionary<string, object>>();
+
+        private SettingsService(IDictionary<string, object> values)
         {
-            Container = container;
-            Values = container.Values;
+            Values = values;
         }
 
         public ISettingsService Open(string folderName, bool createFolderIfNotExists = true)
         {
-            ApplicationDataContainer targetContainer;
-            try
+            IDictionary<string, object> values;
+            if (!_keys.TryGetValue(folderName, out values))
             {
-                targetContainer = Container.CreateContainer(folderName, createFolderIfNotExists ? ApplicationDataCreateDisposition.Always : ApplicationDataCreateDisposition.Existing);
-            }
-            catch (Exception)
-            {
-                throw new KeyNotFoundException($"No folder exists named '{folderName}'");
+                _keys[folderName] = values = new Dictionary<string, object>();
             }
 
-            var service = new SettingsService(targetContainer);
+            var service = new SettingsService(values);
             service.Converters = Converters;
             return service;
         }
@@ -90,8 +82,8 @@ namespace Template10.Services.SettingsService
         {
             if (Values.ContainsKey(key))
                 Values.Remove(key);
-            if (Container.Containers.ContainsKey(key))
-                Container.DeleteContainer(key);
+            if (_keys.ContainsKey(key))
+                _keys.Remove(key);
         }
 
         public void Clear(bool deleteSubContainers = true)
@@ -99,9 +91,9 @@ namespace Template10.Services.SettingsService
             Values.Clear();
             if (deleteSubContainers)
             {
-                foreach (var container in Container.Containers.ToArray())
+                foreach (var container in _keys.ToArray())
                 {
-                    Container.DeleteContainer(container.Key);
+                    _keys.Remove(container.Key);
                 }
             }
         }
@@ -179,6 +171,40 @@ namespace Template10.Services.SettingsService
             {
                 return fallback;
             }
+        }
+
+        public bool IsBasicType(object parameter)
+        {
+            // https://docs.microsoft.com/en-us/windows/uwp/design/app-settings/store-and-retrieve-app-data
+            // Some of these types are surely supported by ApplicationDataContainer,
+            // but most likely not by Frame.
+
+            if (parameter is sbyte || parameter is Int16 || parameter is UInt16 || parameter is Int32 || parameter is UInt32 || parameter is Int64 || parameter is UInt64 || parameter is Single || parameter is Double)
+            {
+                return true;
+            }
+            else if (parameter is bool)
+            {
+                return true;
+            }
+            else if (parameter is char || parameter is string)
+            {
+                return true;
+            }
+            else if (parameter is DateTime || parameter is TimeSpan)
+            {
+                return true;
+            }
+            else if (parameter is Guid || parameter is Point || parameter is Size || parameter is Rect)
+            {
+                return true;
+            }
+            else if (parameter is ApplicationDataCompositeValue)
+            {
+                return true;
+            }
+
+            return false;
         }
     }
 }
