@@ -57,18 +57,6 @@ namespace Template10.Utils
             return null;
         }
 
-        [Obsolete("Use FirstAncestor<T> instead", true)]
-        public static T Ancestor<T>(this DependencyObject control) where T : DependencyObject
-        {
-            var parent = VisualTreeHelper.GetParent(control) as DependencyObject;
-            while (parent != null)
-            {
-                if (parent is T) return (T)parent;
-                parent = VisualTreeHelper.GetParent(parent) as DependencyObject;
-            }
-            return null;
-        }
-
         public static T FirstChild<T>(this DependencyObject parent) where T : DependencyObject => AllChildren<T>(parent).FirstOrDefault();
 
         public static List<DependencyObject> AllChildren(this DependencyObject parent)
