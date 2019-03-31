@@ -196,3 +196,4 @@ Templates (Project)/Blank/null
 
 *.zip
 /packages/Microsoft.VSSDK.BuildTools.15.0.26201
+/.vs
