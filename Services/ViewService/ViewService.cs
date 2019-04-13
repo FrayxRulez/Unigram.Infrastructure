@@ -152,10 +152,10 @@ namespace Template10.Services.ViewService
                         newWindow.Close();
                     };
 
-                    var nav = BootStrapper.Current.NavigationServiceFactory(BootStrapper.BackButton.Ignore, BootStrapper.ExistingContent.Exclude, 0, "0", true);
+                    var nav = BootStrapper.Current.NavigationServiceFactory(BootStrapper.BackButton.Ignore, BootStrapper.ExistingContent.Exclude, 0, "0", false);
                     control.NavigationService = nav;
                     nav.Navigate(page, parameter);
-                    newWindow.Content = BootStrapper.Current.CreateRootElement(nav.Frame);
+                    newWindow.Content = BootStrapper.Current.CreateRootElement(nav);
                     newWindow.Activate();
 
                     await ApplicationViewSwitcher

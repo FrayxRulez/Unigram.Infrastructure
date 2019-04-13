@@ -35,6 +35,11 @@ namespace Template10.Common
         {
             try
             {
+                if (BootStrapper.Current.IsMainWindowCreated == false)
+                {
+                    return null;
+                }
+
                 //var mainDispatcher = CoreApplication.MainView.Dispatcher;
                 var mainDispatcher = CoreApplication.MainView.CoreWindow.Dispatcher;
                 return ActiveWrappers.FirstOrDefault(x => x.Window.Dispatcher == mainDispatcher) ??

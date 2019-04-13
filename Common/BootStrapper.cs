@@ -54,6 +54,8 @@ namespace Template10.Common
 
         public IDictionary<string, object> SessionState { get; set; } = new Dictionary<string, object>();
 
+        internal volatile bool IsMainWindowCreated;
+
         #region Debug
 
         [Conditional("DEBUG")]
@@ -99,11 +101,13 @@ namespace Template10.Common
         protected override void OnWindowCreated(WindowCreatedEventArgs args)
         {
             DebugWrite();
+
+            IsMainWindowCreated = true;
             //should be called to initialize and set new SynchronizationContext
             //if (!WindowWrapper.ActiveWrappers.Any())
-                Loaded();
             // handle window
             var window = CreateWindowWrapper(args.Window);
+            Loaded();
             ViewService.OnWindowCreated();
             base.OnWindowCreated(args);
         }
@@ -316,6 +320,11 @@ namespace Template10.Common
                 {
                     if (key == Windows.System.VirtualKey.Escape)
                     {
+                        if (popup.Child is INavigatingPage navigating)
+                        {
+                            navigating.OnBackRequesting(args);
+                        }
+
                         args.Handled = true;
                     }
                     else
@@ -623,7 +632,7 @@ namespace Template10.Common
         /// </summary>
         public abstract UIElement CreateRootElement(IActivatedEventArgs e);
 
-        public abstract UIElement CreateRootElement(Frame frame);
+        public abstract UIElement CreateRootElement(INavigationService navigationService);
 
         private async Task CallOnInitializeAsync(bool canRepeat, IActivatedEventArgs e)
         {
@@ -858,5 +867,10 @@ namespace Template10.Common
     public interface INavigablePage
     {
         void OnBackRequested(HandledEventArgs args);
+    }
+
+    public interface INavigatingPage : INavigablePage
+    {
+        void OnBackRequesting(HandledEventArgs args);
     }
 }
