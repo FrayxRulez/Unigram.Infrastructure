@@ -308,7 +308,7 @@ namespace Template10.Common
         {
             DebugWrite();
 
-            var args = new HandledEventArgs();
+            var args = new HandledRoutedEventArgs();
             BackRequested?.Invoke(null, args);
             if (handled = args.Handled)
                 return;
@@ -362,13 +362,13 @@ namespace Template10.Common
         }
 
         // this event precedes the in-frame event by the same name
-        public static event EventHandler<HandledEventArgs> BackRequested;
+        public static event EventHandler<HandledRoutedEventArgs> BackRequested;
 
         private void RaiseForwardRequested()
         {
             DebugWrite();
 
-            var args = new HandledEventArgs();
+            var args = new HandledRoutedEventArgs();
             ForwardRequested?.Invoke(null, args);
             if (args.Handled)
                 return;
@@ -396,7 +396,7 @@ namespace Template10.Common
         public event EventHandler ShellBackButtonUpdated;
 
         // this event precedes the in-frame event by the same name
-        public static event EventHandler<HandledEventArgs> ForwardRequested;
+        public static event EventHandler<HandledRoutedEventArgs> ForwardRequested;
 
         #region overrides
 
@@ -866,11 +866,11 @@ namespace Template10.Common
 
     public interface INavigablePage
     {
-        void OnBackRequested(HandledEventArgs args);
+        void OnBackRequested(HandledRoutedEventArgs args);
     }
 
     public interface INavigatingPage : INavigablePage
     {
-        void OnBackRequesting(HandledEventArgs args);
+        void OnBackRequesting(HandledRoutedEventArgs args);
     }
 }
