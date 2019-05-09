@@ -809,7 +809,7 @@ namespace Template10.Common
             {
                 DebugWrite($"autoExtendExecutionSession: {autoExtendExecutionSession}");
 
-                if (autoExtendExecutionSession /*&& AnalyticsInfo.VersionInfo.DeviceFamily != "Windows.Desktop"*/)
+                if (autoExtendExecutionSession && AnalyticsInfo.VersionInfo.DeviceFamily != "Windows.Desktop")
                 {
                     using (var session = new ExtendedExecutionSession { Reason = ExtendedExecutionReason.SavingData })
                     {
@@ -872,5 +872,10 @@ namespace Template10.Common
     public interface INavigatingPage : INavigablePage
     {
         void OnBackRequesting(HandledRoutedEventArgs args);
+    }
+
+    public interface ISearchablePage
+    {
+        void Search();
     }
 }
