@@ -298,6 +298,12 @@ namespace Template10.Common
 
         #endregion
 
+        public void RaiseBackRequested()
+        {
+            var handled = false;
+            RaiseBackRequested(Windows.System.VirtualKey.GoBack, ref handled);
+        }
+
         /// <summary>
         /// Default Hardware/Shell Back handler overrides standard Back behavior 
         /// that navigates to previous app in the app stack to instead cause a backward page navigation.
