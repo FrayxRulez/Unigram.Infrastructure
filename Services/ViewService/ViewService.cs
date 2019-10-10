@@ -114,7 +114,7 @@ namespace Template10.Services.ViewService
 
 
 
-            if (_windows.TryGetValue(parameter, out DispatcherWrapper value))
+            if (parameter != null && _windows.TryGetValue(parameter, out DispatcherWrapper value))
             {
                 var newControl = await value.Dispatch(async () =>
                 {
@@ -135,7 +135,11 @@ namespace Template10.Services.ViewService
             {
                 var newView = CoreApplication.CreateNewView();
                 var dispatcher = new DispatcherWrapper(newView.Dispatcher);
-                _windows[parameter] = dispatcher;
+
+                if (parameter != null)
+                {
+                    _windows[parameter] = dispatcher;
+                }
 
                 var bounds = Window.Current.Bounds;
 
@@ -148,7 +152,11 @@ namespace Template10.Services.ViewService
                     var control = ViewLifetimeControl.GetForCurrentView();
                     control.Released += (s, args) =>
                     {
-                        _windows.TryRemove(parameter, out DispatcherWrapper ciccio);
+                        if (parameter != null)
+                        {
+                            _windows.TryRemove(parameter, out DispatcherWrapper ciccio);
+                        }
+
                         newWindow.Close();
                     };
 
@@ -160,7 +168,8 @@ namespace Template10.Services.ViewService
 
                     await ApplicationViewSwitcher
                         .TryShowAsStandaloneAsync(newAppView.Id, ViewSizePreference.Default, currentView.Id, size);
-                    newAppView.TryResizeView(new Windows.Foundation.Size(360, bounds.Height));
+                    //newAppView.TryResizeView(new Windows.Foundation.Size(360, bounds.Height));
+                    newAppView.TryResizeView(new Windows.Foundation.Size(360, 640));
 
                     return control;
                 }).ConfigureAwait(false);
