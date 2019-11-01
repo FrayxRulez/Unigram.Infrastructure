@@ -16,7 +16,6 @@ using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Controls.Primitives;
 using Template10.Services.ViewService;
 using System.Diagnostics;
-using Microsoft.HockeyApp;
 using Windows.UI.Xaml.Media;
 using Windows.ApplicationModel.Core;
 using Windows.System.Profile;
