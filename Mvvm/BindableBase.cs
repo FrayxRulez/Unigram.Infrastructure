@@ -1,5 +1,4 @@
-﻿using Microsoft.HockeyApp;
-using System;
+﻿using System;
 using System.ComponentModel;
 using System.Linq.Expressions;
 using System.Reflection;
@@ -54,10 +53,7 @@ namespace Template10.Mvvm
                 {
                     handler(this, args);
                 }
-                catch (Exception ex)
-                {
-                    HockeyClient.Current.TrackException(ex);
-                }
+                catch { }
             }
         }
 
@@ -104,10 +100,7 @@ namespace Template10.Mvvm
                     {
                         handler(this, args);
                     }
-                    catch (Exception ex)
-                    {
-                        HockeyClient.Current.TrackException(ex);
-                    }
+                    catch { }
                 }
             }
         }
