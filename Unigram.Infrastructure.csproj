@@ -133,7 +133,6 @@
     <Compile Include="Common\Deferral.cs" />
     <Compile Include="Common\BootStrapper.cs" />
     <Compile Include="Common\DispatcherWrapper.cs" />
-    <Compile Include="Common\HandledEventArgs.cs" />
     <Compile Include="Common\IDispatcherWrapper.cs" />
     <Compile Include="Common\TypedEventHandler.cs" />
     <Compile Include="Common\WindowWrapper.cs" />
