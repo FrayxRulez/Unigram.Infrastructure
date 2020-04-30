@@ -181,7 +181,14 @@ namespace Template10.Services.NavigationService
 
                     // update bindings after NavTo initializes data
                     //XamlUtils.InitializeBindings(page);
-                    XamlUtils.UpdateBindings(page);
+                    if (page.Content is UserControl pageWith)
+                    {
+                        XamlUtils.UpdateBindings(pageWith);
+                    }
+                    else
+                    {
+                        XamlUtils.UpdateBindings(page);
+                    }
                 }
             }
         }

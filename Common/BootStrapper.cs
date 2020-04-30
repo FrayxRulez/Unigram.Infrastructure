@@ -279,18 +279,19 @@ namespace Template10.Common
         {
             DebugWrite();
 
-            var handled = false;
-            if (ApiInformation.IsApiContractPresent(nameof(Windows.Phone.PhoneContract), 1, 0))
-            {
-                if (NavigationService?.CanGoBack == true)
-                {
-                    handled = true;
-                }
-            }
-            else
-            {
-                handled = (NavigationService?.CanGoBack == false);
-            }
+            //var handled = false;
+            //if (ApiInformation.IsApiContractPresent(nameof(Windows.Phone.PhoneContract), 1, 0))
+            //{
+            //    if (NavigationService?.CanGoBack == true)
+            //    {
+            //        handled = true;
+            //    }
+            //}
+            //else
+            //{
+            //    handled = (NavigationService?.CanGoBack == false);
+            //}
+            var handled = NavigationService?.CanGoBack == false;
 
             RaiseBackRequested(Windows.System.VirtualKey.GoBack, ref handled);
             args.Handled = handled;

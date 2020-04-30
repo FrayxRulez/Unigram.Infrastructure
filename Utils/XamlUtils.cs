@@ -22,7 +22,7 @@ namespace Template10.Utils
             }
         }
 
-        public static void UpdateBindings(Page page)
+        public static void UpdateBindings(UserControl page)
         {
             var field = page.GetType().GetTypeInfo().GetDeclaredField("Bindings");
             var bindings = field?.GetValue(page);
@@ -30,7 +30,7 @@ namespace Template10.Utils
             update?.Invoke(bindings, null);
         }
 
-        public static void InitializeBindings(Page page)
+        public static void InitializeBindings(UserControl page)
         {
             var field = page.GetType().GetTypeInfo().GetDeclaredField("Bindings");
             var bindings = field?.GetValue(page);
@@ -38,7 +38,7 @@ namespace Template10.Utils
             update?.Invoke(bindings, null);
         }
 
-        public static void StopTrackingBindings(Page page)
+        public static void StopTrackingBindings(UserControl page)
         {
             var field = page.GetType().GetTypeInfo().GetDeclaredField("Bindings");
             var bindings = field?.GetValue(page);
